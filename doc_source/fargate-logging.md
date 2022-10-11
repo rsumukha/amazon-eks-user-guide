@@ -43,6 +43,19 @@ The main sections included in a typical `Fluent Conf` are `Service`, `Input`, `F
  The `Filter` and `Output` sections and manages the `Service` and `Input` sections itself\.
 A `Parser` section\.
 If you provide any sections other than `Filter`, `Output`, and `Parser`, the sections are rejected\.
+Fargate log router has the following `Input` section :
+```
+[INPUT]
+    Name tail
+    DB /var/log/flb_kube.db
+    Mem_Buf_Limit 10MB
+    Path /var/log/containers/*.log
+    Read_From_Head On
+    Refresh_Interval 10
+    Rotate_Wait 30
+    Skip_Long_Lines On
+    Tag kube.*
+```
 
    When creating the `ConfigMap`, take into account the following rules that Fargate uses to validate fields:
    + `[FILTER]`, `[OUTPUT]`, and `[PARSER]` are supposed to be specified under each corresponding key\. For example, `[FILTER]` must be under `filters.conf`\. You can have one or more `[FILTER]`s under `filters.conf`\. The `[OUTPUT]` and `[PARSER]` sections should also be under their corresponding keys\. By specifying multiple `[OUTPUT]` sections, you can route your logs to different destinations at the same time\.
@@ -79,29 +92,16 @@ Amazon EKS Fargate logging doesn't support dynamic configuration of `ConfigMaps`
         name: aws-logging
         namespace: aws-observability
       data:
-        flb_log_cw: "true"  #ships fluent-bit process logs to CloudWatch
-        filters.conf: |
-          [FILTER]
-              Name parser
-              Match *
-              Key_name log
-              Parser crio
-          [FILTER]
-              Name kubernetes
-              Match kube.*
-              Merge_Log On
-              Keep_Log Off
-              Buffer_Size 0
-              Kube_Meta_Cache_TTL 300s
         output.conf: |
           [OUTPUT]
               Name cloudwatch_logs
-              Match   kube.*
+              Match   *
               region region-code
-              log_group_name my-logs
+              log_group_name fluent-bit-cloudwatch
               log_stream_prefix from-fluent-bit-
-              log_retention_days 60
               auto_create_group true
+              log_key log
+      
         parsers.conf: |
           [PARSER]
               Name crio
@@ -109,6 +109,13 @@ Amazon EKS Fargate logging doesn't support dynamic configuration of `ConfigMaps`
               Regex ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>P|F) (?<log>.*)$
               Time_Key    time
               Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+        
+        filters.conf: |
+           [FILTER]
+              Name parser
+              Match *
+              Key_name log
+              Parser crio
       ```
 
    1. Apply the manifest to your cluster\.
